@@ -443,14 +443,14 @@ def _reset_page_html(
 
     if done:
         body = success_body(
-            title="Password updated",
+            title="Password updated successfully",
             message=(
-                "Your Therapist Portal password is ready. "
+                "Your Therapist Portal password has been updated. "
                 "You can close this tab and sign in to SpeakEasy."
             ),
             cta_label="Open Therapist Portal",
         )
-        heading = "You're all set"
+        heading = "Password updated successfully"
         subtitle = "Your Therapist Portal account is secured with the new password."
     elif not token.strip() and error:
         body = error_body(
@@ -502,11 +502,13 @@ def _reset_page_html(
         heading = "Choose a new password"
         subtitle = "Create a strong password to protect your Therapist Portal account."
 
+    # Hide banner on terminal success/error screens (message is already in the body)
+    show_banner = bool(banner_html) and not done and not (not token.strip() and error)
     return branded_shell(
         title="Reset password",
         heading=heading,
         subtitle=subtitle,
-        banner_html=banner_html if not (done or (not token.strip() and error)) else "",
+        banner_html=banner_html if show_banner else "",
         body_html=body,
     )
 
@@ -549,7 +551,11 @@ def reset_password_page_post(
             status_code=exc.status_code,
         )
     return HTMLResponse(
-        _reset_page_html(token="", message="Password updated. You can log in now.", done=True)
+        _reset_page_html(
+            token="",
+            message="Password updated successfully. You can log in now.",
+            done=True,
+        )
     )
 
 
