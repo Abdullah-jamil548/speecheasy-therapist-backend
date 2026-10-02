@@ -1,0 +1,24 @@
+# Example Render Blueprint (optional).
+# Or create the Web Service manually in the Render dashboard.
+
+services:
+  - type: web
+    name: speakeasy-therapist-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.0"
+      - key: APP_NAME
+        value: SpeakEasy for Therapists API
+      - key: API_PREFIX
+        value: /api
+      - key: DEBUG
+        value: "false"
+      # Set these in Render dashboard (Secret):
+      # JWT_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+      # SMTP_USER, SMTP_PASSWORD, SMTP_FROM_EMAIL, SMTP_FROM_NAME
+      # APP_PUBLIC_URL (your Render URL), DOCTOR_APP_URL (doctor web URL)
+      # GOOGLE_CLIENT_IDS
