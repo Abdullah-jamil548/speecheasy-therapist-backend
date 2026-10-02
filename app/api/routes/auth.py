@@ -27,7 +27,7 @@ from app.core.security import (
     public_therapist,
     verify_password,
 )
-from app.core.config import get_settings
+from app.core.config import get_settings, public_site_origin
 from app.repositories.supabase_client import get_db
 from app.core.logging import get_logger
 from app.api.html.branded_pages import banner, branded_shell, error_body, success_body
@@ -210,7 +210,7 @@ def google_login(body: GoogleLoginRequest) -> TokenResponse:
             "consultation_fee": 0,
             "status": "pending",
             "doctor_code": doctor_code,
-            "rating": 0,
+            "rating": 0.0,
         }
         try:
             created = db.insert("therapists", row)
@@ -260,7 +260,7 @@ def register(body: RegisterRequest) -> MessageResponse:
         "consultation_fee": body.consultation_fee,
         "status": "pending",
         "doctor_code": doctor_code,
-        "rating": 0,
+        "rating": 0.0,
     }
     try:
         db.insert("therapists", row)
@@ -461,8 +461,12 @@ def _reset_page_html(
         heading = "Reset unavailable"
         subtitle = "Open the secure Reset password button from your SpeakEasy email again."
     else:
+        post_url = escape(
+            f"{public_site_origin(get_settings())}/api/auth/reset-password-page",
+            quote=True,
+        )
         body = f"""
-        <form method="post" action="/api/auth/reset-password-page" class="form" autocomplete="off">
+        <form method="post" action="{post_url}" class="form" autocomplete="off">
           <input type="hidden" name="token" value="{safe_token}" />
           <label class="field">
             <span>New password</span>

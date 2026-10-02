@@ -3,7 +3,7 @@ from __future__ import annotations
 import smtplib
 from email.message import EmailMessage
 
-from app.core.config import get_settings
+from app.core.config import get_settings, public_site_origin
 
 # SpeakEasy brand (same tokens as Flutter AppColors.light)
 _BRAND = "#2F6B5F"       # primaryIndigo / tealPrimary
@@ -135,8 +135,22 @@ def send_email(
     text_body: str | None = None,
 ) -> None:
     settings = get_settings()
+
+    # Prefer Resend (HTTPS) — Render Free blocks outbound SMTP.
+    if (settings.resend_api_key or "").strip():
+        _send_via_resend(
+            to_email=to_email,
+            subject=subject,
+            html_body=html_body,
+            text_body=text_body,
+        )
+        return
+
     if not settings.smtp_user or not settings.smtp_password:
-        raise RuntimeError("SMTP is not configured. Set SMTP_USER and SMTP_PASSWORD in .env")
+        raise RuntimeError(
+            "Email is not configured. On Render set RESEND_API_KEY "
+            "(https://resend.com). Locally you can use SMTP_USER / SMTP_PASSWORD."
+        )
 
     from_addr = settings.smtp_from_email or settings.smtp_user
     msg = EmailMessage()
@@ -153,6 +167,46 @@ def send_email(
         smtp.send_message(msg)
 
 
+def _send_via_resend(
+    *,
+    to_email: str,
+    subject: str,
+    html_body: str,
+    text_body: str | None,
+) -> None:
+    import httpx
+
+    settings = get_settings()
+    from_addr = (settings.resend_from_email or "").strip() or (
+        f"{settings.smtp_from_name} <{settings.smtp_from_email or settings.smtp_user}>"
+    )
+    payload: dict = {
+        "from": from_addr,
+        "to": [to_email],
+        "subject": subject,
+        "html": html_body,
+    }
+    if text_body:
+        payload["text"] = text_body
+
+    res = httpx.post(
+        "https://api.resend.com/emails",
+        headers={
+            "Authorization": f"Bearer {settings.resend_api_key.strip()}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=30,
+    )
+    if res.status_code >= 400:
+        detail = res.text
+        try:
+            detail = res.json().get("message") or detail
+        except Exception:
+            pass
+        raise RuntimeError(f"Resend failed ({res.status_code}): {detail}")
+
+
 def send_verification_email(
     *,
     to_email: str,
@@ -161,7 +215,7 @@ def send_verification_email(
     code: str,
 ) -> None:
     settings = get_settings()
-    link = f"{settings.app_public_url.rstrip('/')}/api/auth/verify-email?token={token}"
+    link = f"{public_site_origin(settings)}/api/auth/verify-email?token={token}"
     name = doctor_name.strip() or "Doctor"
     html = branded_email_html(
         preheader=f"Your SpeakEasy verification code is {code}",
@@ -193,7 +247,7 @@ def send_verification_email(
 
 def send_password_reset_email(*, to_email: str, token: str, doctor_name: str = "") -> None:
     settings = get_settings()
-    link = f"{settings.app_public_url.rstrip('/')}/api/auth/reset-password-page?token={token}"
+    link = f"{public_site_origin(settings)}/api/auth/reset-password-page?token={token}"
     name = (doctor_name or "").strip() or "Doctor"
     html = branded_email_html(
         preheader="Secure link to update your Therapist Portal password",

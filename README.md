@@ -61,11 +61,23 @@ Docs: http://localhost:8000/docs
 | POST | `/api/appointments/{id}/respond` |
 | POST | `/api/appointments/{id}/cancel` |
 
-## Deploy note
+## Deploy on Vercel (try SMTP / forgot-password)
 
-Prefer **Railway / Render / Fly.io / Cloud Run** for this FastAPI service. Vercel is not a good fit.
+Repo includes `vercel.json` + `api/index.py` for serverless FastAPI.
 
-## Deploy on Render (recommended)
+1. [vercel.com](https://vercel.com) → **Add New** → **Project** → import **same GitHub repo** as backend
+2. **Root Directory:** leave default (repo root with `requirements.txt`)
+3. **Environment Variables:** paste same `.env` as Render (see table below). Important:
+   - `APP_PUBLIC_URL` = `https://YOUR-PROJECT.vercel.app` (after first deploy, update and redeploy)
+   - Keep `SMTP_*` Gmail values — test if forgot-password works on Vercel
+4. Deploy → test:
+   - `https://YOUR-PROJECT.vercel.app/health`
+   - `https://YOUR-PROJECT.vercel.app/docs`
+5. Flutter `constants.dart` API base → `https://YOUR-PROJECT.vercel.app/api`
+
+**Note:** Vercel is serverless (cold starts, 10–30s limits). If SMTP still fails or routes break, use **Render + Resend** instead.
+
+## Deploy on Render
 
 Backend folder must be on **GitHub** first (this API is separate from the Flutter app).
 

@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -30,7 +31,7 @@ class Settings(BaseSettings):
         "26703591720-pt9vo0tdkudsqfd3dteeqi1kf1l7dluv.apps.googleusercontent.com"
     )
 
-    # SMTP
+    # SMTP (works locally; Render Free blocks SMTP ports)
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
     smtp_user: str = ""
@@ -39,7 +40,32 @@ class Settings(BaseSettings):
     smtp_from_name: str = "SpeakEasy for Therapists"
     smtp_use_tls: bool = True
 
+    # Resend (HTTPS email — required on Render Free)
+    # https://resend.com → API Keys. Free: onboarding@resend.dev or verified domain.
+    resend_api_key: str = ""
+    resend_from_email: str = "SpeakEasy for Therapists <onboarding@resend.dev>"
+
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def public_site_origin(settings: Settings | None = None) -> str:
+    """Base URL for email links (verify / reset). Uses Vercel/Render env if APP_PUBLIC_URL is still localhost."""
+    s = settings or get_settings()
+    raw = (s.app_public_url or "").strip().rstrip("/")
+    lower = raw.lower()
+    if raw and "localhost" not in lower and not lower.startswith("http://127."):
+        return raw
+
+    vercel = os.environ.get("VERCEL_URL", "").strip()
+    if vercel:
+        host = vercel if vercel.startswith("http") else f"https://{vercel}"
+        return host.rstrip("/")
+
+    render = os.environ.get("RENDER_EXTERNAL_URL", "").strip()
+    if render:
+        return render.rstrip("/")
+
+    return raw or "http://localhost:8000"
