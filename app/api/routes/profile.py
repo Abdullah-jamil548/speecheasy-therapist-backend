@@ -86,7 +86,18 @@ def set_or_update_password(
 
 
 @router.delete("")
+@router.delete("/")
 def delete_me(doctor: dict[str, Any] = Depends(get_current_doctor)) -> dict[str, str]:
+    return _delete_doctor_account(doctor)
+
+
+@router.post("/delete")
+def delete_me_post(doctor: dict[str, Any] = Depends(get_current_doctor)) -> dict[str, str]:
+    """Same as DELETE /me — POST works on hosts that mishandle DELETE."""
+    return _delete_doctor_account(doctor)
+
+
+def _delete_doctor_account(doctor: dict[str, Any]) -> dict[str, str]:
     """
     Permanently delete this therapist from the database.
 
