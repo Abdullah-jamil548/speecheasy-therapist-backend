@@ -83,3 +83,64 @@ def set_or_update_password(
     return MessageResponse(
         message="Password updated." if has_password else "Password set. You can also sign in with email."
     )
+
+
+@router.delete("")
+def delete_me(doctor: dict[str, Any] = Depends(get_current_doctor)) -> dict[str, str]:
+    """
+    Permanently delete this therapist from the database.
+
+    Cascades (via FK or explicit deletes):
+    patients, patient_requests, availability, appointments, therapist_ratings.
+    Also removes email_tokens and clears profiles.doctor_uid links.
+    Patient practice data (attempts / focus_sound) is NOT deleted — it belongs
+    to the child/parent account.
+    """
+    db = get_db()
+    doctor_id = str(doctor["id"])
+    email = str(doctor.get("email") or "")
+
+    # Auth tokens (no guaranteed FK cascade)
+    try:
+        db.delete("email_tokens", {"doctor_id": f"eq.{doctor_id}"})
+    except Exception as exc:
+        log.warning("email_tokens cleanup failed for %s: %s", doctor_id, exc)
+
+    # Explicit child rows first (safe even if DB cascade is missing)
+    for table in (
+        "therapist_ratings",
+        "appointments",
+        "availability",
+        "patient_requests",
+        "patients",
+    ):
+        try:
+            db.delete(table, {"doctor_id": f"eq.{doctor_id}"})
+        except Exception as exc:
+            log.warning("%s cleanup failed for %s: %s", table, doctor_id, exc)
+
+    # Unlink from parent/user profiles (ON DELETE SET NULL — do it explicitly too)
+    try:
+        db.update(
+            "profiles",
+            {"doctor_uid": f"eq.{doctor_id}"},
+            {"doctor_uid": None},
+        )
+    except Exception as exc:
+        log.warning("profiles.doctor_uid clear failed for %s: %s", doctor_id, exc)
+
+    try:
+        db.delete("therapists", {"id": f"eq.{doctor_id}"})
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not delete account: {exc}",
+        ) from exc
+
+    # Confirm gone
+    left = db.select("therapists", filters={"id": f"eq.{doctor_id}"}, limit=1)
+    if left:
+        raise HTTPException(status_code=500, detail="Account delete did not complete.")
+
+    log.info("ACCOUNT DELETED | %s <%s> | id=%s", doctor.get("full_name"), email, doctor_id)
+    return {"message": "Account permanently deleted from the database."}

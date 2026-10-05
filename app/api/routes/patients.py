@@ -224,6 +224,128 @@ def delete_patient(
     }
 
 
+def _patient_owned_by_doctor(
+    db: Any, doctor_id: str, patient_id: str
+) -> dict[str, Any]:
+    rows = db.select(
+        "patients",
+        filters={"id": f"eq.{patient_id}", "doctor_id": f"eq.{doctor_id}"},
+        limit=1,
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return rows[0]
+
+
+@router.get("/patients/{patient_id}/progress")
+def get_patient_progress(
+    patient_id: str,
+    doctor: dict[str, Any] = Depends(get_current_doctor),
+    limit: int = 200,
+) -> dict[str, Any]:
+    """
+    Linked child's practice progress from the user/speech app.
+
+    Reads the same Supabase tables the user app writes:
+    - attempts: best score per (item_id, alphabet, level); score >= 70 = passed
+    - focus_sound: active phoneme + overall progress 0..1
+    - progress_events: first-pass milestones only (optional, for trends)
+
+    After a user-side reset, attempts/events are empty and focus returns to bay.
+    """
+    db = get_db()
+    patient = _patient_owned_by_doctor(db, doctor["id"], patient_id)
+    uid = str(patient.get("patient_uid") or "").strip()
+    if not uid:
+        return {
+            "patient_id": patient_id,
+            "patient_uid": None,
+            "attempts": [],
+            "focus_sound": None,
+            "progress_events": [],
+            "summary": {
+                "total_attempts": 0,
+                "passed_items": 0,
+                "average_score": None,
+                "best_score": None,
+                "latest_score": None,
+            },
+        }
+
+    # Cap limit defensively (PostgREST range)
+    limit = max(1, min(int(limit or 200), 500))
+
+    try:
+        attempts = db.select(
+            "attempts",
+            filters={"patient_uid": f"eq.{uid}"},
+            order="attempted_at.desc",
+            limit=limit,
+        )
+    except Exception as exc:
+        log.warning("attempts read failed for %s: %s", uid, exc)
+        attempts = []
+    for row in attempts:
+        if not row.get("attempted_at"):
+            row["attempted_at"] = row.get("created_at")
+
+    focus = None
+    try:
+        focus_rows = db.select(
+            "focus_sound",
+            filters={"patient_uid": f"eq.{uid}"},
+            limit=5,
+        )
+        focus = focus_rows[0] if focus_rows else None
+    except Exception as exc:
+        log.warning("focus_sound unavailable for %s: %s", uid, exc)
+
+    events: list[dict[str, Any]] = []
+    try:
+        events = db.select(
+            "progress_events",
+            filters={"patient_uid": f"eq.{uid}"},
+            order="earned_at.desc",
+            limit=limit,
+        )
+    except Exception as exc:
+        # Table may not exist on older DBs; attempts still work.
+        log.warning("progress_events unavailable for %s: %s", uid, exc)
+
+    scored = [
+        float(a["score"])
+        for a in attempts
+        if a.get("score") is not None and str(a.get("score")).strip() != ""
+    ]
+    passed = sum(1 for s in scored if s >= 70)
+    avg = round(sum(scored) / len(scored), 2) if scored else None
+    best = max(scored) if scored else None
+    latest = scored[0] if scored else None
+
+    log.info(
+        "PATIENT PROGRESS | by %s | patient=%s | uid=%s | attempts=%s | passed=%s",
+        _who(doctor),
+        patient_id,
+        uid,
+        len(attempts),
+        passed,
+    )
+    return {
+        "patient_id": patient_id,
+        "patient_uid": uid,
+        "attempts": attempts,
+        "focus_sound": focus,
+        "progress_events": events,
+        "summary": {
+            "total_attempts": len(attempts),
+            "passed_items": passed,
+            "average_score": avg,
+            "best_score": best,
+            "latest_score": latest,
+        },
+    }
+
+
 @router.get("/requests")
 def list_requests(doctor: dict[str, Any] = Depends(get_current_doctor)) -> list[dict[str, Any]]:
     db = get_db()

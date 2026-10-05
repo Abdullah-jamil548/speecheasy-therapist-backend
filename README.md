@@ -52,8 +52,11 @@ Docs: http://localhost:8000/docs
 | Method | Path |
 |--------|------|
 | GET/PATCH | `/api/me` |
+| DELETE | `/api/me` | Permanently delete therapist + related rows |
+| POST | `/api/me/password` |
 | GET/POST | `/api/patients` |
 | PATCH/DELETE | `/api/patients/{id}` |
+| GET | `/api/patients/{id}/progress` | Linked child's attempts + focus (user-app tables) |
 | GET | `/api/requests` |
 | POST | `/api/requests/{id}/respond` |
 | GET/POST | `/api/availability` |

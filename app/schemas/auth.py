@@ -1,8 +1,25 @@
 from __future__ import annotations
 
 from typing import Any, Optional
+import re
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+
+_DIGITS = re.compile(r"\d")
+
+
+def _validate_languages(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = value.strip()
+    if not text:
+        return text
+    if _DIGITS.search(text):
+        raise ValueError("Languages spoken cannot contain numbers.")
+    if len(text) > 120:
+        raise ValueError("Languages spoken is too long.")
+    return text
 
 
 class RegisterRequest(BaseModel):
@@ -15,6 +32,11 @@ class RegisterRequest(BaseModel):
     years_of_experience: int = Field(default=0, ge=0, le=50)
     languages_spoken: str = ""
     consultation_fee: float = Field(default=0, ge=0)
+
+    @field_validator("languages_spoken")
+    @classmethod
+    def languages_no_digits(cls, value: str) -> str:
+        return _validate_languages(value) or ""
 
 
 class LoginRequest(BaseModel):
@@ -61,6 +83,11 @@ class TherapistUpdate(BaseModel):
     years_of_experience: Optional[int] = None
     languages_spoken: Optional[str] = None
     consultation_fee: Optional[float] = None
+
+    @field_validator("languages_spoken")
+    @classmethod
+    def languages_no_digits(cls, value: str | None) -> str | None:
+        return _validate_languages(value)
 
 
 class SetPasswordRequest(BaseModel):
